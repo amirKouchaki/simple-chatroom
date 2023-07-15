@@ -2,7 +2,7 @@ import axios from "axios";
 import echoClient from "./echo";
 
 const axiosClient = axios.create({
-    baseURL: import.meta.env.VITE_BACKEND_URL + "/api/",
+    baseURL: import.meta.env.VITE_BACKEND_URL,
     // withCredentials: true,
     headers: {
         Accept: "application/json",

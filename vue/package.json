@@ -11,6 +11,8 @@
   "dependencies": {
     "@formkit/auto-animate": "^0.7.0",
     "@formkit/vue": "^0.18.0-e975323",
+    "sass": "^1.63.6",
+    "sass-loader": "^13.3.2",
     "vue": "^3.3.4"
   },
   "devDependencies": {

@@ -14,8 +14,7 @@ const echoClient = new Echo({
     wssPort: import.meta.env.VITE_PUSHER_PORT ?? 443,
     forceTLS: (import.meta.env.VITE_PUSHER_SCHEME ?? "https") === "https",
     enabledTransports: ["ws", "wss"],
+    authEndpoint: "http://localhost:8000/broadcasting/auth",
 });
-
-echoClient.socketId();
 
 export default echoClient;
