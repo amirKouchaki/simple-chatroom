@@ -12,12 +12,18 @@ class Message extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['sender','text'];
+    protected $fillable = ['text'];
 
 
     public function createdAt() : Attribute {
         return  Attribute::make(
             get: fn($date) => Carbon::parse($date)->format('Y-m-d H:i')
         );
+    }
+
+
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
     }
 }

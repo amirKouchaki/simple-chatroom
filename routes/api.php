@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AuthenticationController;
 use App\Http\Controllers\MessageController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Broadcast;
@@ -23,5 +24,6 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
 });
 
 
-Route::post('/messages',[MessageController::class,'store']);
-Route::get('/messages',[MessageController::class,'index']);
+Route::post('messages',[MessageController::class,'store'])->middleware('auth:sanctum');
+Route::get('messages',[MessageController::class,'index'])->middleware('auth:sanctum');
+Route::post('auth',[AuthenticationController::class,'registerAndLogin']);

@@ -3,13 +3,27 @@
         <div class="chatroom-container">
             <div class="chatroom-header">
                 <h2>Dark Chatroom</h2>
-                <button @click="toggleDarkMode" class="dark-mode-button">
-                    <span v-if="darkMode">Light Mode</span>
-                    <span v-else>Dark Mode</span>
-                </button>
+                <div>
+                    <button @click="toggleDarkMode" class="dark-mode-button">
+                        <span v-if="darkMode">Light Mode</span>
+                        <span v-else>Dark Mode</span>
+                    </button>
+                    <button
+                        class="dark-mode-button leave-btn"
+                        @click="leaveChannel"
+                        v-if="hasJoinedChannel"
+                        v-auto-animate
+                    >
+                        Leave Channel
+                    </button>
+                </div>
             </div>
             <div class="chatroom-content">
-                <div class="chatroom-messages" v-auto-animate>
+                <div
+                    class="chatroom-messages"
+                    v-auto-animate
+                    ref="chatMessagesRef"
+                >
                     <div
                         v-for="message in chatMessages"
                         :key="message.time"
@@ -23,7 +37,7 @@
                         />
                         <div class="message-details">
                             <div class="message-sender">
-                                {{ message.sender }}
+                                {{ message.user.name }}
                             </div>
                             <div class="message-bubble">
                                 <p class="message-text">
@@ -52,46 +66,141 @@
                         <div class="flag__body">
                             <div class="message">
                                 <div class="message__bubble">
-                                    <p>Watson is responding&hellip;</p>
+                                    <p>
+                                        {{ typists.join(",") }}
+                                        <span>{{
+                                            typists.length > 1
+                                                ? " are "
+                                                : " is "
+                                        }}</span>
+                                        typing&hellip;
+                                    </p>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
-                <form @submit.prevent="sendMessage" class="chatroom-form">
-                    <input
-                        v-model="newMessage"
-                        type="text"
-                        placeholder="Type your message"
-                    />
-                    <button type="submit">Send</button>
-                </form>
+                <div v-auto-animate>
+                    <form
+                        v-if="hasJoinedChannel"
+                        @submit.prevent="sendMessage"
+                        class="chatroom-form"
+                        v-auto-animate
+                    >
+                        <input
+                            v-model="newMessage"
+                            type="text"
+                            placeholder="Type your message"
+                        />
+                        <button type="submit">Send</button>
+                    </form>
+                    <form
+                        v-else
+                        @submit.prevent="joinChannel"
+                        class="chatroom-form"
+                        v-auto-animate
+                    >
+                        <input
+                            v-model="name"
+                            type="text"
+                            placeholder="Enter your name"
+                        />
+                        <button type="submit">Join Chat</button>
+                    </form>
+                </div>
             </div>
         </div>
     </div>
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from "vue";
-import echoClient from "./../echo";
+import { computed, nextTick, reactive, ref, watch } from "vue";
+import { useAuthentication } from "./stores/authentication";
+import { echoClient, initEcho } from "./../echo";
 import axiosClient from "../axios";
-import autoAnimate from "@formkit/auto-animate";
+import { infoToast, successToast, errorToast } from "./composables/toast";
 
+const authentication = useAuthentication();
+initEcho();
 const darkMode = ref(true);
+const chatMessagesRef = ref();
 const chatMessages = ref([]);
 const newMessage = ref("");
+const name = ref("");
 const isTyping = ref(false);
 const showTyping = ref(false);
-const chatChannel = echoClient.channel("chat");
+const typists = ref([]);
+const chatChannel = ref(null);
 const typingTimer = ref(null);
+
+const hasJoinedChannel = computed(() => {
+    return chatChannel.value;
+});
+
+const leaveChannel = () => {
+    echoClient.leave("chat");
+    chatChannel.value = null;
+};
+
+const registerAndLogin = async () => {
+    const res = await axiosClient.post("/api/auth", { name: name.value });
+    authentication.token = res.data.token;
+};
+
+const getMessages = async () => {
+    const res = await axiosClient.get("/api/messages");
+    chatMessages.value = res.data.messages;
+    await nextTick();
+    chatMessagesRef.value.scrollTop = chatMessagesRef.value.scrollHeight;
+};
+
+const typeWhisperCallback = (data) => {
+    if (data.typing) {
+        typists.value.push(data.typist);
+        showTyping.value = true;
+    } else {
+        const indexToRemove = typists.value.indexOf(data.typist);
+        if (indexToRemove !== -1) {
+            typists.value.splice(indexToRemove, 1);
+        }
+
+        if (typists.value.length === 0) showTyping.value = false;
+    }
+};
+
+const registerPresenceEvents = () => {
+    chatChannel.value
+        .here((user) => {
+            successToast("You joined the channel!!");
+        })
+        .joining((user) => {
+            infoToast(user.name + " joined the channel!!");
+        })
+        .leaving((user) => {
+            infoToast(user.name + " have left the channel!!");
+        });
+};
+
+const joinChannel = async () => {
+    await registerAndLogin();
+    await getMessages();
+
+    initEcho();
+    chatChannel.value = echoClient.join("chat");
+    registerPresenceEvents();
+
+    chatChannel.value.listen("MessageSent", (e) => {
+        chatMessages.value.push(e.message);
+    });
+
+    chatChannel.value.listenForWhisper("typing", typeWhisperCallback);
+};
 
 const sendMessage = async () => {
     if (newMessage.value) {
-        const message = {
-            sender: "amir",
+        const res = await axiosClient.post("/api/messages", {
             text: newMessage.value,
-        };
-        const res = await axiosClient.post("/api/messages", message);
+        });
         chatMessages.value.push({ ...res.data.message, isTheSender: true });
         newMessage.value = "";
     }
@@ -101,53 +210,39 @@ const toggleDarkMode = () => {
     darkMode.value = !darkMode.value;
 };
 
-// const setTypingStatus = (status) => {
-//     isTyping.value = status;
-//     chatChannel.whisper("typing", {
-//         typing: status,
-//     });
-// };
-
-// const clearTypingTimer = () => {
-//     if (typingTimer.value) {
-//         clearTimeout(typingTimer.value);
-//         typingTimer.value = null;
-//     }
-// };
-
-// const startTypingTimer = () => {
-//     clearTypingTimer();
-
-//     typingTimer.value = setTimeout(() => {
-//         setTypingStatus(false);
-//     }, 1500);
-// };
-
-onMounted(async () => {
-    try {
-        axiosClient.get("/sanctum/csrf-cookie");
-    } catch (error) {
-        console.log(error);
-    }
-    const res = await axiosClient.get("/api/messages");
-    chatMessages.value = res.data.messages;
-    chatChannel.listen("MessageSent", (e) => {
-        chatMessages.value.push(e.message);
+//TODO : what if someone changes their frontEnd received game, so other will recieve the wrong and edited name
+const setTypingStatus = (status) => {
+    isTyping.value = status;
+    chatChannel.value.whisper("typing", {
+        typing: status,
+        typist: name.value,
     });
-    // chatChannel.listenForWhisper("typing", (data) => {
-    //     showTyping.value = data.typing;
-    // });
+};
+
+const clearTypingTimer = () => {
+    if (typingTimer.value) {
+        clearTimeout(typingTimer.value);
+        typingTimer.value = null;
+    }
+};
+
+const startTypingTimer = () => {
+    clearTypingTimer();
+
+    typingTimer.value = setTimeout(() => {
+        setTypingStatus(false);
+    }, 2500);
+};
+
+watch(newMessage, (newVal, prevVal) => {
+    if (chatChannel.value && newVal !== prevVal && newVal !== "") {
+        if (!isTyping.value) {
+            setTypingStatus(true);
+        }
+
+        startTypingTimer();
+    }
 });
-
-// watch(newMessage, (newVal, prevVal) => {
-//     if (newVal !== prevVal && newVal !== "") {
-//         if (!isTyping.value) {
-//             setTypingStatus(true);
-//         }
-
-//         startTypingTimer();
-//     }
-// });
 </script>
 
 <style lang="scss">
@@ -196,6 +291,15 @@ body {
 .chatroom.dark-mode {
     background-image: url(https://via.placeholder.com/1200x800/282c34/FFFFFF);
     /* Adjust the border color for dark mode */ /* Use a subtle border color with transparency */
+}
+
+.leave-btn {
+    transition: all 0.4s ease-in-out !important;
+    border-radius: 0.2em;
+}
+
+.leave-btn:hover {
+    background-color: #ff6666;
 }
 
 .chatroom-header {

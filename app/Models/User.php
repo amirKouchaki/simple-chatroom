@@ -20,8 +20,6 @@ class User extends Authenticatable
      */
     protected $fillable = [
         'name',
-        'email',
-        'password',
     ];
 
     /**
@@ -44,6 +42,9 @@ class User extends Authenticatable
         'password' => 'hashed',
     ];
 
-
+    public function messages(): HasMany
+    {
+        return $this->hasMany(Message::class);
+    }
 
 }

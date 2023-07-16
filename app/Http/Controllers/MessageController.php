@@ -11,7 +11,7 @@ class MessageController extends Controller
 {
 
     public function index() {
-        $messages = Message::all()->toArray();
+        $messages = Message::with('user')->get()->toArray();
         return response()->json(compact('messages'));
     }
 
@@ -19,8 +19,8 @@ class MessageController extends Controller
     public function store(StoreMessageRequest $request) {
         $data = $request->validated();
 
-        $message = Message::create($data);
-
+        $message = auth()->user()?->messages()->create($data);
+        $message->load('user');
         broadcast(new MessageSent($message))->toOthers();
 
 
